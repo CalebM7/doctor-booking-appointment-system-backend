@@ -199,9 +199,9 @@ const bookAppointment = async (req, res) => {
       slots_booked[slotDate].push(slotTime);
     }
 
-    const userData = await userModel.findById(userId).select('-password')
+    const userData = await userModel.findById(userId).select('-password');
 
-    delete docData.slots_booked
+    delete docData.slots_booked;
 
     const appointmentData = {
       userId,
@@ -211,22 +211,21 @@ const bookAppointment = async (req, res) => {
       amount: docData.fees,
       slotTime,
       slotDate,
-      date: Date.now()
-    }
+      date: Date.now(),
+    };
 
-    const newAppointment = new appointmentModel(appointmentData)
-    await newAppointment.save()
+    const newAppointment = new appointmentModel(appointmentData);
+    await newAppointment.save();
 
     // save new slots data in docData
-    await doctorModel.findByIdAndUpdate(docId, {slots_booked})
+    await doctorModel.findByIdAndUpdate(docId, { slots_booked });
 
     res.json({
       success: true,
-      message: 'Appointment Booked'
-    })
-
-
+      message: 'Appointment Booked',
+    });
   } catch (error) {
+    console.log(error);
     res.json({
       success: false,
       message: error.message,
@@ -234,4 +233,30 @@ const bookAppointment = async (req, res) => {
   }
 };
 
-export { registerUser, loginUser, getProfile, updateProfile, bookAppointment };
+// API to get user appointments for frontend my-appointments page
+const listAppointment = async (req, res) => {
+  try {
+    const { userId } = req;
+    const appointments = await appointmentModel.find({ userId });
+
+    res.json({
+      success: true,
+      appointments,
+    });
+  } catch (error) {
+    console.log(error);
+    res.json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export {
+  registerUser,
+  loginUser,
+  getProfile,
+  updateProfile,
+  bookAppointment,
+  listAppointment,
+};
