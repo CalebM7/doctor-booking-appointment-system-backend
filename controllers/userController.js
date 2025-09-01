@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { v2 as cloudinary } from 'cloudinary';
 import doctorModel from '../models/doctorModel.js';
 import appointmentModel from '../models/appointmentModel.js';
+import Stripe from 'stripe';
 
 // API to register user
 const registerUser = async (req, res) => {
@@ -298,6 +299,89 @@ const cancelAppointment = async (req, res) => {
   }
 };
 
+const stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// API to make payment of appointment using stripe
+const paymentStripe = async (req, res) => {
+  try {
+    const { appointmentId } = req.body;
+    const appointmentData = await appointmentModel.findById(appointmentId);
+
+    if (!appointmentData || appointmentData.cancelled) {
+      return res.json({
+        success: false,
+        message: 'Appointment Cancelled or not found',
+      });
+    }
+
+    // creating options for stripe payment
+    const options = {
+      line_items: [
+        {
+          price_data: {
+            currency: process.env.CURRENCY || 'usd',
+            product_data: {
+              name: `Appointment with ${appointmentData.docData.name}`,
+              description: `Appointment on ${appointmentData.slotDate} at ${appointmentData.slotTime}`,
+            },
+            unit_amount: appointmentData.amount * 100,
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL}/my-appointments?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/my-appointments`,
+      client_reference_id: appointmentId,
+    };
+
+    // creation of an order
+    const session = await stripeInstance.checkout.sessions.create(options);
+
+    res.json({
+      success: true,
+      session,
+    });
+  } catch (error) {
+    console.log(error);
+    res.json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// API to verify payment and update appointment status
+const verifyPayment = async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const session = await stripeInstance.checkout.sessions.retrieve(sessionId);
+
+    console.log(session)
+
+    if (session.payment_status === 'paid') {
+      const appointmentId = session.client_reference_id;
+      await appointmentModel.findByIdAndUpdate(appointmentId, { payment: true });
+
+      res.json({
+        success: true,
+        message: 'Payment successful',
+      });
+    } else {
+      res.json({
+        success: false,
+        message: 'Payment not successful',
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    res.json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export {
   registerUser,
   loginUser,
@@ -306,4 +390,6 @@ export {
   bookAppointment,
   listAppointment,
   cancelAppointment,
+  paymentStripe,
+  verifyPayment,
 };
